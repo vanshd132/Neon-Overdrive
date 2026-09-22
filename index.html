@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#160e20" />
+    <meta name="description" content="Neon Overdrive. A sunset-soaked arcade racer. Dodge traffic, chase the close call, and make the night yours in a 90-second sprint or an endless run." />
+    <link rel="stylesheet" href="/src/style.css" />
+    <title>NEON OVERDRIVE — After Hours Arcade Racing</title>
+  </head>
+  <body data-state="menu" data-boost="false" data-hit="false">
+    <div id="world"></div>
+    <div class="screen-texture" aria-hidden="true"></div>
+    <div class="drive-effects" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <div class="brand" aria-label="Neon Overdrive, arcade division">
+        <svg class="brand-mark" width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+          <path d="M3 28 12 8h7l-9 20H3Zm14 0 9-20h7l-9 20h-7Z" fill="currentColor" />
+          <path d="M13 8h5l5 20h-5L13 8Z" fill="currentColor" />
+        </svg>
+        <span class="brand-copy">NEON OVERDRIVE<span>ARCADE DIVISION · VOL. 01</span></span>
+      </div>
+      <nav class="global-controls" aria-label="Game controls">
+        <button id="pause-btn" class="utility-button" type="button" aria-label="Pause game (P or Escape)" title="Pause · P / Esc">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 2h3v12H3zm7 0h3v12h-3z" /></svg>
+          <span>Pause</span>
+        </button>
+        <button id="mute-btn" class="utility-button" type="button" aria-label="Toggle sound (M)" title="Toggle sound · M">Sound off</button>
+        <button id="fullscreen-btn" class="utility-button fullscreen-button" type="button" aria-label="Toggle fullscreen" title="Toggle fullscreen">
+          <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M7 3H3v4m10-4h4v4M3 13v4h4m10-4v4h-4" /></svg>
+          <span>Fullscreen</span>
+        </button>
+      </nav>
+    </header>
+
+    <main id="app" aria-label="Neon Overdrive racing game">
+      <section id="menu" class="menu-overlay" aria-labelledby="game-title">
+        <div class="menu-layout">
+          <div class="menu-copy">
+            <p class="eyebrow menu-eyebrow"><span class="eyebrow-line" aria-hidden="true"></span>After hours <span class="eyebrow-divider">//</span> Arcade racing</p>
+            <h1 id="game-title" class="game-title"><span>NEON</span><span class="title-overdrive">OVERDRIVE<span class="title-period">.</span></span></h1>
+            <p class="intro">No brakes. No boring nights.</p>
+
+            <div class="run-setup">
+              <fieldset class="mode-picker" aria-describedby="mode-help">
+                <legend class="field-label"><span>01</span> Pick your run</legend>
+                <div class="mode-options">
+                  <button class="mode-button selected" data-mode="sprint" type="button" aria-pressed="true">
+                    <span class="option-heading">Sprint <span class="selection-dot" aria-hidden="true"></span></span>
+                    <span class="option-description">90-second score chase</span>
+                  </button>
+                  <button class="mode-button" data-mode="endless" type="button" aria-pressed="false">
+                    <span class="option-heading">Endless <span class="selection-dot" aria-hidden="true"></span></span>
+                    <span class="option-description">One road. Survive.</span>
+                  </button>
+                </div>
+                <p id="mode-help" class="sr-only">Sprint: chase the highest score in 90 seconds. Endless: survive for as long as you can.</p>
+              </fieldset>
+
+              <fieldset class="difficulty-picker" aria-describedby="difficulty-help">
+                <legend class="field-label"><span>02</span> Set the heat</legend>
+                <div class="difficulty-options">
+                  <button class="difficulty-button" data-difficulty="chill" type="button" aria-pressed="false"><span class="heat-bars" aria-hidden="true"><i></i></span>Chill</button>
+                  <button class="difficulty-button selected" data-difficulty="normal" type="button" aria-pressed="true"><span class="heat-bars" aria-hidden="true"><i></i><i></i></span>Normal</button>
+                  <button class="difficulty-button" data-difficulty="expert" type="button" aria-pressed="false"><span class="heat-bars" aria-hidden="true"><i></i><i></i><i></i></span>Expert</button>
+                </div>
+                <p id="difficulty-help" class="setup-note">More heat. More traffic. Harder hits.</p>
+              </fieldset>
+            </div>
+
+            <div class="launch-row">
+              <button id="start-btn" class="button button-primary launch-button" type="button">
+                <span>Launch run</span>
+                <svg width="26" height="20" viewBox="0 0 26 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 10h22M15 2l8 8-8 8" /></svg>
+              </button>
+              <div class="personal-best"><span class="micro-label">Personal best</span><strong id="best-score">0</strong><span class="best-unit">PTS / LOCAL RECORD</span></div>
+            </div>
+            <p class="run-hint">Auto acceleration <span>·</span> Dodge traffic <span>·</span> Chase the close call</p>
+            <p class="mechanic-hint">Close calls multiply your score. Nitro recharges; pickups top it up.</p>
+          </div>
+
+          <aside class="scene-caption" aria-label="Scene caption">
+            <span class="scene-coordinate"><span class="live-dot" aria-hidden="true"></span>Coastline after dark</span>
+            <p>The night<br />is yours.</p>
+            <span class="scene-rule" aria-hidden="true"></span>
+            <span class="scene-edition">NO FINISH LINE FOR A GOOD NIGHT / 1986</span>
+          </aside>
+        </div>
+
+        <footer class="menu-footer">
+          <div class="keyboard-guide" aria-label="Keyboard controls">
+            <span class="keyboard-guide-label">Your controls</span>
+            <ul>
+              <li><span><kbd>A</kbd><kbd>D</kbd><span class="key-or">/</span><kbd>←</kbd><kbd>→</kbd></span>Steer</li>
+              <li><span><kbd>S</kbd><span class="key-or">/</span><kbd>↓</kbd></span>Brake</li>
+              <li><kbd>Shift</kbd>Nitro</li>
+              <li><kbd>Space</kbd>Drift</li>
+              <li><span><kbd>P</kbd><span class="key-or">/</span><kbd>Esc</kbd></span>Pause</li>
+              <li><kbd>R</kbd>Restart</li>
+              <li><kbd>M</kbd>Sound</li>
+            </ul>
+          </div>
+          <p class="touch-guide">Touch controls appear on the road.<br /><span>Steer · Brake · Drift · Boost</span></p>
+          <div class="footer-signature">
+            <svg class="circuit-mark" width="78" height="35" viewBox="0 0 78 35" fill="none" aria-hidden="true"><path d="M2 27h18l10-19h16l10 19h20M11 32h15L36 3h5l19 29h8" stroke="currentColor" stroke-width="1" /><path d="M39 26v-5m0-5v-4" stroke="currentColor" /><circle cx="56" cy="27" r="3" fill="currentColor" /></svg>
+            <span>Built for<br /><strong>one more run</strong></span>
+          </div>
+        </footer>
+      </section>
+
+      <section id="hud" class="hud" aria-label="Race telemetry">
+        <div class="hud-top">
+          <div class="score-cluster">
+            <div class="score-readout"><span class="micro-label">Score</span><strong id="score-value">0</strong></div>
+            <div class="combo-readout"><strong id="combo-value">×1</strong><span class="micro-label">Close-call combo</span></div>
+          </div>
+          <div class="run-readouts">
+            <div class="telemetry-stat"><span id="time-label" class="micro-label">Time left</span><strong id="time-value">90</strong></div>
+            <div class="telemetry-stat distance-stat"><span class="micro-label">Distance</span><strong id="distance-value">0 m</strong></div>
+          </div>
+        </div>
+
+        <div class="hud-bottom">
+          <div class="speed-readout">
+            <span class="micro-label speed-caption"><span class="live-dot" aria-hidden="true"></span>Auto / Drive</span>
+            <div><strong id="speed-value">0</strong><span class="speed-unit">KM/H</span></div>
+            <div class="speed-ticks" aria-hidden="true"></div>
+          </div>
+          <p class="driving-hint">Keep it close.<br /><span>Make it count.</span></p>
+          <div class="vehicle-status">
+            <div class="gauge nitro-gauge">
+              <div class="gauge-label"><span>Nitro <span class="gauge-detail">/ Auto recharge + pickups</span></span><kbd>Shift</kbd></div>
+              <div class="gauge-track" aria-label="Nitro reserve"><div id="nitro-fill" class="gauge-fill"></div></div>
+            </div>
+            <div class="gauge health-gauge">
+              <div class="gauge-label"><span>Car integrity</span><span><strong id="health-value">100</strong><span class="percent-mark">%</span></span></div>
+              <div class="gauge-track" aria-label="Car integrity"><div id="health-fill" class="gauge-fill"></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+      <div id="countdown" class="countdown" role="status" aria-live="polite" aria-atomic="true"></div>
+
+      <div id="touch-controls" class="touch-controls" role="group" aria-label="Touch driving controls">
+        <div class="touch-steering">
+          <button class="touch-button touch-direction" data-control="left" type="button" aria-label="Steer left"><svg width="25" height="22" viewBox="0 0 25 22" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M23 11H3m8-8-8 8 8 8" /></svg></button>
+          <button class="touch-button touch-direction" data-control="right" type="button" aria-label="Steer right"><svg width="25" height="22" viewBox="0 0 25 22" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 11h20m-8-8 8 8-8 8" /></svg></button>
+        </div>
+        <div class="touch-actions">
+          <button class="touch-button" data-control="brake" type="button" aria-label="Hold to brake"><span class="touch-symbol" aria-hidden="true">Ⅱ</span><span>Brake</span></button>
+          <button class="touch-button" data-control="drift" type="button" aria-label="Hold to drift"><svg width="23" height="21" viewBox="0 0 23 21" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 19c-7-7 14-10 6-17m4 17c-7-7 14-10 6-17" /></svg><span>Drift</span></button>
+          <button class="touch-button touch-boost" data-control="boost" type="button" aria-label="Hold for nitro boost"><svg width="20" height="23" viewBox="0 0 20 23" fill="currentColor" aria-hidden="true"><path d="m11 1-9 12h7l-1 9L18 9h-7l1-8Z" /></svg><span>Boost</span></button>
+        </div>
+      </div>
+
+      <section id="pause-overlay" class="state-overlay pause-overlay" role="dialog" aria-modal="true" aria-labelledby="pause-title" aria-describedby="pause-description">
+        <div class="pause-content overlay-content">
+          <p class="eyebrow"><span class="eyebrow-line" aria-hidden="true"></span>Pit stop // Take a breath</p>
+          <h2 id="pause-title" class="screen-title">HOLD THE<br /><span>NIGHT.</span></h2>
+          <p id="pause-description" class="overlay-description">The road can wait. Your run is right here.</p>
+          <div class="pause-actions">
+            <button id="resume-btn" class="button button-primary" type="button"><span>Back to the road</span><span aria-hidden="true">↗</span></button>
+            <div class="secondary-actions">
+              <button id="pause-restart-btn" class="button button-secondary" type="button">Restart run</button>
+              <button id="pause-menu-btn" class="button button-secondary" type="button">Main menu</button>
+            </div>
+          </div>
+          <p class="overlay-footnote"><kbd>P</kbd> / <kbd>Esc</kbd> to resume <span>·</span> <kbd>R</kbd> to restart</p>
+        </div>
+      </section>
+
+      <section id="results-overlay" class="state-overlay results-overlay" role="dialog" aria-modal="true" aria-labelledby="result-title" aria-describedby="result-subtitle">
+        <div class="results-content overlay-content">
+          <p class="eyebrow"><span class="eyebrow-line" aria-hidden="true"></span>After hours // Run report</p>
+          <h2 id="result-title" class="screen-title">WHAT A RIDE.</h2>
+          <p id="result-subtitle" class="overlay-description">The night isn't over. There's always one more run.</p>
+          <div class="result-scoreboard">
+            <div class="result-total"><span class="micro-label">Your score</span><strong id="result-score">0</strong><span class="result-score-unit">POINTS</span></div>
+            <div class="result-record"><span class="micro-label">Personal best</span><strong id="result-best">0</strong><span class="micro-label">Local record</span></div>
+          </div>
+          <dl class="result-stats">
+            <div><dt>Distance</dt><dd id="result-distance">0 m</dd></div>
+            <div><dt>Close calls</dt><dd id="result-nearmisses">0</dd></div>
+            <div><dt>Top speed</dt><dd id="result-top-speed">0 km/h</dd></div>
+          </dl>
+          <div class="result-actions">
+            <button id="restart-btn" class="button button-primary" type="button"><span>One more run</span><span aria-hidden="true">↗</span></button>
+            <button id="menu-btn" class="button button-secondary" type="button">Main menu</button>
+          </div>
+          <p class="overlay-footnote">New night. Same obsession. <span>//</span> <kbd>R</kbd> to restart</p>
+        </div>
+      </section>
+
+      <section id="error-panel" class="error-panel" role="alert" aria-labelledby="error-title" hidden>
+        <div class="error-content">
+          <p class="eyebrow">Signal lost // Graphics unavailable</p>
+          <h2 id="error-title" class="screen-title">A LITTLE<br />ENGINE TROUBLE.</h2>
+          <p id="error-message">The 3D engine couldn't start. Try a WebGL-capable browser with hardware acceleration enabled.</p>
+          <p class="error-footnote">The road will be here when you're ready.</p>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
