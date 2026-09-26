@@ -1,5 +1,5 @@
 import { expect, test, describe } from 'vitest'
-import { DIFFICULTIES, LANES, PLAYER_Z, Race } from './race'
+import { DIFFICULTIES, LANES, PLAYER_Z, Race, ZONE_LENGTH, gearbox, roadCurve } from './race'
 import type { Controls, Difficulty, Mode, RaceEvent, Traffic } from './race'
 
 const STEP = 0.05
@@ -87,6 +87,8 @@ describe('seeded simulation', () => {
     const first = new Race('endless', 'expert', seededRandom(42))
     const second = new Race('endless', 'expert', seededRandom(42))
     expect(snapshot(first)).toEqual(snapshot(second))
+    // Wandering traffic crosses x=0, so give both runs enough health to last.
+    first.health = second.health = 10_000
 
     for (let i = 0; i < 600; i++) {
       // Staying between the middle lanes avoids incidental collisions even
@@ -499,35 +501,60 @@ describe('pickups and repairs', () => {
 })
 
 describe('race completion', () => {
-  test('sprint finishes after 1,800 fixed steps, not one tick after 90 simulated seconds', () => {
-    const race = emptyRace('sprint')
-    expect(advanceClear(race, 1_799)).not.toContain('finish')
-    expect(race.finished).toBe(false)
+  test.each(DIFFICULTY_NAMES)('sprint clock starts at the %s allowance and only counts down in sprint', difficulty => {
+    const sprint = emptyRace('sprint', difficulty)
+    const endless = emptyRace('endless', difficulty)
+    expect(sprint.timeLeft).toBe(DIFFICULTIES[difficulty].clock)
+    clearStep(sprint)
+    clearStep(endless)
+    expect(sprint.timeLeft).toBeCloseTo(DIFFICULTIES[difficulty].clock - STEP)
+    expect(endless.timeLeft).toBe(0)
+    expect(endless.finished).toBe(false)
+  })
 
-    const events = clearStep(race)
-    expect(race.time).toBeCloseTo(90, 8)
-    // Regression guard: accumulated 0.05-second steps can leave time just
-    // below 90, which a strict time >= 90 comparison may miss for one tick.
-    expect(events).toEqual(['finish'])
+  test('sprint finishes on the exact step the clock runs out, despite float drift', () => {
+    const race = emptyRace('sprint')
+    race.timeLeft = 1
+    expect(advanceClear(race, 19)).not.toContain('finish')
+    expect(race.finished).toBe(false)
+    expect(clearStep(race)).toEqual(['finish'])
     expect(race.finished).toBe(true)
     expect(race.completed).toBe(true)
   })
 
-  test.each(DIFFICULTY_NAMES)('sprint finishes at 90 seconds and pays the %s survival bonus only once', difficulty => {
+  test('crossing a checkpoint scores the district and extends only the sprint clock', () => {
+    const sprint = emptyRace('sprint')
+    const endless = emptyRace('endless')
+    for (const race of [sprint, endless]) {
+      race.distance = ZONE_LENGTH - 1
+      race.speed = 228
+      race.timeLeft = race.mode === 'sprint' ? 10 : 0
+    }
+    expect(clearStep(sprint)).toEqual(['zone'])
+    expect(clearStep(endless)).toEqual(['zone'])
+    expect(sprint.zoneIndex).toBe(1)
+    expect(sprint.checkpoints).toBe(1)
+    expect(sprint.zone.name).toBe('Neon Downtown')
+    expect(sprint.timeLeft).toBeCloseTo(10 - STEP + 24)
+    expect(endless.timeLeft).toBe(0)
+    expect(sprint.score).toBeCloseTo(228 / 3.6 * STEP * 0.8 + 750)
+  })
+
+  test.each(DIFFICULTY_NAMES)('sprint finishes when the clock runs out and pays the %s survival bonus only once', difficulty => {
     const race = emptyRace('sprint', difficulty)
     const multiplier = DIFFICULTIES[difficulty].multiplier
-    race.time = 90 - 2 * STEP
+    race.timeLeft = 2 * STEP
     race.speed = DIFFICULTIES[difficulty].cruise
     race.health = 73
 
     expect(clearStep(race)).toEqual([])
-    expect(race.time).toBeLessThan(90)
+    expect(race.timeLeft).toBeGreaterThan(0)
     expect(race.finished).toBe(false)
     const score = race.score
     const distance = race.distance
 
     expect(clearStep(race, BOOST)).toEqual(['finish'])
-    expect(race.time).toBeCloseTo(90)
+    expect(race.timeLeft).toBe(0)
     expect(race.finished).toBe(true)
     expect(race.completed).toBe(true)
     expect(race.boosting).toBe(false)
@@ -637,15 +664,19 @@ describe('safe spawning and bounded populations', () => {
     const trafficIds = new Set(race.traffic.map(traffic => traffic.id))
     const pickupIds = new Set(race.pickups.map(pickup => pickup.id))
 
-    // No clearing, teleporting, healing, or private spawn calls. x=0 is the
-    // safe gap between lanes; all spawned cars (including trucks) miss it.
+    let maxHazards = 0
+    // No clearing, teleporting, healing, or private spawn calls. Traffic wanders
+    // and changes lanes, so hold invulnerability and steer against curve pull.
     for (let i = 0; i < 12_000; i++) {
-      const events = race.step(STEP, IDLE)
+      race.invulnerable = 1
+      const steer = Math.max(-1, Math.min(1, -(race.x * 0.8 + race.lateralSpeed * 0.15)))
+      const events = race.step(STEP, { ...IDLE, steer })
       unexpectedEvent ||= events.includes('crash') || events.includes('finish') || events.includes('edge')
       maxTraffic = Math.max(maxTraffic, race.traffic.length)
       maxPickups = Math.max(maxPickups, race.pickups.length)
+      maxHazards = Math.max(maxHazards, race.hazards.length)
       trafficInBounds &&= race.traffic.every(traffic =>
-        traffic.z > -330 && traffic.z < 38 && LANES.includes(traffic.x),
+        traffic.z > -330 && traffic.z < 38 && Math.abs(traffic.x) <= 8.5,
       )
       pickupsInBounds &&= race.pickups.every(pickup => pickup.z >= -205 && pickup.z < 30)
       for (const traffic of race.traffic) trafficIds.add(traffic.id)
@@ -655,6 +686,8 @@ describe('safe spawning and bounded populations', () => {
     // Generous bounds allow RNG variation but catch missing expiry/filtering.
     expect(maxTraffic).toBeLessThanOrEqual(32)
     expect(maxPickups).toBeLessThanOrEqual(4)
+    expect(maxHazards).toBeLessThanOrEqual(8)
+    expect(race.zoneIndex).toBeGreaterThan(4)
     expect(trafficIds.size).toBeGreaterThan(100)
     expect(pickupIds.size).toBeGreaterThan(50)
     expect(trafficInBounds).toBe(true)
@@ -667,5 +700,170 @@ describe('safe spawning and bounded populations', () => {
     expect(race.nitro).toBeLessThanOrEqual(100)
     expect(Number.isFinite(race.score)).toBe(true)
     expect(Number.isFinite(race.distance)).toBe(true)
+  })
+})
+
+describe('road, hazards, and traffic AI', () => {
+  test('the opening stretch is straight and later curves pull the car outward', () => {
+    expect(roadCurve(0)).toBe(0)
+    expect(roadCurve(340)).toBe(0)
+    let bend = 400
+    while (Math.abs(roadCurve(bend)) < 0.3) bend += 10
+    const race = emptyRace()
+    race.speed = 228
+    race.distance = bend
+    clearStep(race)
+    expect(Math.sign(race.x)).toBe(-Math.sign(race.curve))
+  })
+
+  test('gearbox maps speed to six gears with a normalised rev fraction', () => {
+    expect(gearbox(0)).toEqual({ gear: 1, rev: 0 })
+    expect(gearbox(100).gear).toBe(3)
+    expect(gearbox(322).gear).toBe(6)
+    expect(gearbox(322).rev).toBeGreaterThan(0)
+    expect(gearbox(322).rev).toBeLessThan(1)
+  })
+
+  test('a ramp launches the car over traffic, then lands for a combo bonus', () => {
+    const race = emptyRace()
+    race.speed = 228
+    race.hazards = [{ id: -1, kind: 'ramp', x: 0, z: PLAYER_Z }]
+    expect(race.step(STEP, IDLE)).toEqual(['jump'])
+    expect(race.air).toBeGreaterThan(0.85)
+    expect(race.hazards).toHaveLength(0)
+
+    race.step(STEP, IDLE)
+    expect(race.height).toBeGreaterThan(0)
+    const under = car({ z: PLAYER_Z + 3.9 })
+    race.traffic = [under]
+    expect(race.step(STEP, IDLE)).toEqual(['vault'])
+    expect(race.health).toBe(100)
+    expect(race.vaults).toBe(1)
+    expect(race.combo).toBe(2)
+
+    const events: RaceEvent[] = []
+    for (let i = 0; i < 40 && race.air > 0; i++) events.push(...clearStep(race))
+    expect(events).toContain('land')
+    expect(race.jumps).toBe(1)
+    expect(race.combo).toBe(3)
+    expect(race.height).toBe(0)
+  })
+
+  test('a boost pad surges past cruise speed without using nitro', () => {
+    const race = emptyRace()
+    race.speed = 200
+    race.nitro = 50
+    race.hazards = [{ id: -1, kind: 'pad', x: 0, z: PLAYER_Z }]
+    expect(race.step(STEP, IDLE)).toEqual(['pad'])
+    expect(race.speed).toBe(280)
+    expect(race.nitro).toBeCloseTo(50 + 7 * STEP + 12)
+    advanceClear(race, 10)
+    expect(race.speed).toBeGreaterThan(300)
+  })
+
+  test('oil spins the car out, ignores steering, and breaks the combo', () => {
+    const race = emptyRace()
+    race.speed = 228
+    race.combo = 4
+    race.comboTime = 6
+    race.hazards = [{ id: -1, kind: 'oil', x: 0, z: PLAYER_Z }]
+    expect(race.step(STEP, IDLE)).toEqual(['oil'])
+    expect(race.spin).toBeGreaterThan(1)
+    expect(race.combo).toBe(1)
+    const left = emptyRace()
+    left.spin = race.spin
+    left.speed = 228
+    const right = emptyRace()
+    right.spin = race.spin
+    right.speed = 228
+    clearStep(left, { ...IDLE, steer: -1 })
+    clearStep(right, { ...IDLE, steer: 1 })
+    expect(left.x).toBeCloseTo(right.x)
+  })
+
+  test('slipstreaming behind a car adds nitro and pace', () => {
+    const race = emptyRace()
+    race.speed = 228
+    race.nitro = 20
+    race.traffic = [car({ z: PLAYER_Z - 15, speed: 228 / 3.6 })]
+    race.step(STEP, IDLE)
+    expect(race.drafting).toBe(true)
+    expect(race.nitro).toBeCloseTo(20 + 21 * STEP)
+    expect(race.speed).toBeGreaterThan(228)
+  })
+
+  test('braking traffic closes in faster and lane changes are signalled first', () => {
+    const cruising = emptyRace()
+    const braking = emptyRace()
+    for (const race of [cruising, braking]) {
+      race.speed = 228
+      race.traffic = [car({ z: -100, speed: 25, lane: 2.5, x: 2.5, phase: 0 })]
+    }
+    braking.traffic[0].brakeTime = 1
+    cruising.step(STEP, IDLE)
+    braking.step(STEP, IDLE)
+    expect(braking.traffic[0].z).toBeGreaterThan(cruising.traffic[0].z)
+
+    const race = new Race('endless', 'expert', seededRandom(7))
+    race.health = 10_000
+    let signalled = 0
+    let changed = 0
+    for (let i = 0; i < 4_000; i++) {
+      const before = new Map(race.traffic.map(traffic => [traffic.id, traffic.lane]))
+      race.step(STEP, IDLE)
+      for (const traffic of race.traffic) {
+        if (traffic.signal) signalled++
+        const lane = before.get(traffic.id)
+        if (lane !== undefined && lane !== traffic.lane) changed++
+      }
+    }
+    expect(signalled).toBeGreaterThan(0)
+    expect(changed).toBeGreaterThan(0)
+  })
+
+  test('hazards never spawn oil into the last traffic-free lane', () => {
+    const race = new Race('endless', 'normal', seededRandom(99))
+    race.health = 10_000
+    race.distance = ZONE_LENGTH * 3
+    race.zoneIndex = 3
+    for (let i = 0; i < 6_000; i++) {
+      const before = new Set(race.hazards.map(hazard => hazard.id))
+      race.invulnerable = 1
+      race.step(STEP, IDLE)
+      for (const hazard of race.hazards) {
+        if (before.has(hazard.id) || hazard.kind !== 'oil') continue
+        const open = LANES.filter(x => x !== hazard.x && !race.traffic.some(traffic =>
+          (traffic.lane ?? traffic.x) === x && traffic.z > hazard.z - 12 && traffic.z < PLAYER_Z + 8))
+        expect(open.length).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  test('missions start, track progress, and pay out nitro and sprint time', () => {
+    const race = emptyRace('sprint')
+    race.timeLeft = 200
+    race.speed = 228
+    const events = advanceClear(race, 200)
+    expect(events).toContain('mission-start')
+    expect(race.mission).not.toBeNull()
+    race.mission = { kind: 'pickup', target: 1, progress: 0, time: 10 }
+    race.nitro = 10
+    race.pickups = [{ id: -1, x: race.x, z: PLAYER_Z, repair: false }]
+    const timeLeft = race.timeLeft
+    const result = race.step(STEP, IDLE)
+    expect(result).toEqual(['pickup', 'mission-complete'])
+    expect(race.missionsDone).toBe(1)
+    expect(race.nitro).toBe(100)
+    expect(race.timeLeft).toBeCloseTo(timeLeft - STEP + 5)
+    expect(race.mission).toBeNull()
+  })
+
+  test('a timed-out mission fails without penalty', () => {
+    const race = emptyRace()
+    race.mission = { kind: 'drift', target: 3, progress: 0, time: STEP }
+    const health = race.health
+    expect(clearStep(race)).toEqual(['mission-fail'])
+    expect(race.mission).toBeNull()
+    expect(race.health).toBe(health)
   })
 })

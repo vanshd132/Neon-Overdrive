@@ -1,5 +1,5 @@
 import './style.css'
-import { Race, type Mode, type Difficulty, type Controls, type RaceEvent } from './race'
+import { Race, ZONES, gearbox, type Mode, type Difficulty, type Controls, type RaceEvent, type Mission } from './race'
 import { HighwayWorld } from './world'
 import { ArcadeAudio } from './audio'
 
@@ -18,11 +18,13 @@ let race = new Race(mode, difficulty)
 let countdown = 0
 let lastCountdown = ''
 let toastTime = 0
+let bannerTime = 0
 let hitTime = 0
 let hudTime = 0
 let accumulator = 0
 let lastTime = 0
 let frame = 0
+let controls: Controls = { steer: 0, brake: false, boost: false, drift: false }
 let world: HighwayWorld
 let disposed = false
 const cleanup: (() => void)[] = []
@@ -32,7 +34,8 @@ function listen(target: EventTarget, event: string, handler: EventListener, opti
   cleanup.push(() => target.removeEventListener(event, handler, options))
 }
 
-function bestKey() { return `neon-overdrive.best.v1.${mode}.${difficulty}` }
+// v2: sprint became a checkpoint race, so v1 sprint records are not comparable.
+function bestKey() { return `neon-overdrive.best.v2.${mode}.${difficulty}` }
 function getBest(): number {
   try {
     const value = Number(localStorage.getItem(bestKey()))
@@ -65,12 +68,34 @@ function notify(message: string, duration = 2.2) {
   toastTime = duration
 }
 
+function banner(zoneIndex: number) {
+  const zone = ZONES[zoneIndex % ZONES.length]
+  const lap = Math.floor(zoneIndex / ZONES.length)
+  text('banner-eyebrow', `District ${String(zoneIndex + 1).padStart(2, '0')}${lap ? ` // Heat ${lap + 1}` : ''}`)
+  text('banner-title', zone.name)
+  text('banner-tagline', zone.tagline)
+  element('banner').classList.add('visible')
+  bannerTime = 3.2
+}
+
+function missionLabel(mission: Mission) {
+  switch (mission.kind) {
+    case 'near': return `Chain ${mission.target} close calls`
+    case 'drift': return `Drift for ${mission.target} seconds`
+    case 'speed': return `Hold 285+ km/h for ${mission.target}s`
+    case 'clean': return `No crashes for ${mission.target}s`
+    case 'air': return 'Hit a ramp and stick the landing'
+    case 'pickup': return `Grab ${mission.target} pickups`
+  }
+}
+
 function start() {
   if (!world) return
   race = new Race(mode, difficulty)
   world.reset()
-  countdown = 3.2; lastCountdown = ''; toastTime = 0; hitTime = 0
+  countdown = 3.2; lastCountdown = ''; toastTime = 0; hitTime = 0; bannerTime = 0
   element('toast').classList.remove('visible')
+  element('banner').classList.remove('visible')
   document.body.dataset.hit = 'false'
   text('time-label', mode === 'sprint' ? 'Time left' : 'Survived')
   setState('running')
@@ -96,13 +121,17 @@ function finish() {
   const best = Math.max(previousBest, score)
   let saved = true
   try { localStorage.setItem(bestKey(), String(best)) } catch { saved = false }
-  text('result-title', race.completed ? 'NIGHT. CONQUERED.' : 'WHAT A RIDE.')
-  text('result-subtitle', `${score > previousBest ? 'New personal best! ' : ''}${race.completed ? 'Sprint complete. Integrity bonus banked.' : 'Out of integrity. The road is calling for a rematch.'}${saved ? '' : ' Local storage unavailable; this record is session-only.'}`)
+  const sprintDone = race.completed && mode === 'sprint'
+  text('result-title', sprintDone ? 'OUT OF TIME.' : 'WHAT A RIDE.')
+  text('result-subtitle', `${score > previousBest ? 'New personal best! ' : ''}Made it to ${race.zone.name}. ${sprintDone ? 'Integrity bonus banked.' : 'Out of integrity. The road is calling for a rematch.'}${saved ? '' : ' Local storage unavailable; this record is session-only.'}`)
   text('result-score', formatScore(score))
   text('result-best', formatScore(best))
   text('result-distance', formatDistance(race.distance))
-  text('result-nearmisses', String(race.nearMisses))
+  text('result-nearmisses', String(race.nearMisses + race.vaults))
   text('result-top-speed', `${Math.round(race.topSpeed)} km/h`)
+  text('result-checkpoints', String(race.checkpoints))
+  text('result-jumps', String(race.jumps))
+  text('result-missions', String(race.missionsDone))
   audio.effect('finish')
   setState('gameover')
 }
@@ -110,7 +139,7 @@ function finish() {
 function events(items: RaceEvent[]) {
   for (const event of items) {
     if (event === 'crash') {
-      hitTime = 0.45; world.burst(race.x, true); audio.effect('crash')
+      hitTime = 0.45; world.burst(race.x, 'crash'); audio.effect('crash')
       notify('HARD HIT // Keep moving', 1.6)
     } else if (event === 'near') {
       world.burst(race.x); audio.effect('near')
@@ -119,6 +148,21 @@ function events(items: RaceEvent[]) {
       world.burst(race.x); audio.effect('pickup')
       notify(event === 'repair' ? 'QUICK FIX // +24 INTEGRITY' : 'CHARGED UP // +32 NITRO', 1.3)
     } else if (event === 'edge') notify('GUARDRAIL // Back to the road', 1.8)
+    else if (event === 'zone') {
+      banner(race.zoneIndex); audio.effect('checkpoint')
+      if (race.lastBonus) notify(`CHECKPOINT // +${race.lastBonus}s`, 2.4)
+    } else if (event === 'jump') { audio.effect('jump'); notify('AIRTIME!', 1.2) }
+    else if (event === 'land') {
+      world.burst(race.x, 'dust', 0.3); audio.effect('land')
+      notify(`STUCK THE LANDING // ×${race.combo}`, 1.6)
+    } else if (event === 'vault') { audio.effect('near'); notify(`VAULTED A CAR // ×${race.combo}`, 1.6) }
+    else if (event === 'pad') { world.burst(race.x, 'pad', 0.2); audio.effect('pad'); notify('BOOST PAD', 1.1) }
+    else if (event === 'oil') { world.burst(race.x, 'oil', 0.2); audio.effect('oil'); notify('OIL SLICK // Hold on!', 1.6) }
+    else if (event === 'mission-start' && race.mission) notify(`NEW MISSION // ${missionLabel(race.mission)}`, 2.6)
+    else if (event === 'mission-complete') {
+      audio.effect('mission')
+      notify(`MISSION COMPLETE // FULL NITRO${mode === 'sprint' ? ' +5s' : ''}`, 2.4)
+    } else if (event === 'mission-fail') { audio.effect('fail'); notify('MISSION FAILED', 1.6) }
     else if (event === 'finish') finish()
   }
 }
@@ -139,8 +183,23 @@ function updateHUD() {
   text('score-value', formatScore(race.score))
   text('speed-value', String(Math.round(race.speed)))
   text('distance-value', formatDistance(race.distance))
-  const seconds = Math.max(0, mode === 'sprint' ? Math.ceil(90 - race.time) : Math.floor(race.time))
+  const seconds = Math.max(0, mode === 'sprint' ? Math.ceil(race.timeLeft) : Math.floor(race.time))
   text('time-value', mode === 'sprint' ? `${seconds}s` : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`)
+  document.body.dataset.lowtime = String(mode === 'sprint' && state === 'running' && race.timeLeft < 10)
+  text('zone-label', `District ${String(race.zoneIndex + 1).padStart(2, '0')}`)
+  text('zone-value', race.zone.name)
+  text('checkpoint-value', `Next gate ${formatDistance(race.nextCheckpoint)}`)
+  text('gear-value', String(gearbox(race.speed).gear))
+  element('draft-tag').hidden = !race.drafting
+  const mission = race.mission
+  element('mission').hidden = !mission
+  if (mission) {
+    const timed = mission.kind === 'drift' || mission.kind === 'speed' || mission.kind === 'clean'
+    text('mission-label', missionLabel(mission))
+    text('mission-progress', timed ? `${mission.progress.toFixed(1)} / ${mission.target}s` : `${mission.progress} / ${mission.target}`)
+    text('mission-time', `${Math.ceil(mission.time)}s left`)
+    element('mission-fill').style.width = `${Math.min(100, mission.progress / mission.target * 100)}%`
+  }
   text('combo-value', `×${race.combo}`)
   text('health-value', String(Math.ceil(race.health)))
   element('nitro-fill').style.width = `${race.nitro}%`
@@ -245,25 +304,27 @@ function animate(timestamp: number) {
         audio.effect(value === 'GO' ? 'go' : 'countdown')
         lastCountdown = value
       }
-      if (!countdown) { element('countdown').classList.remove('visible'); notify('CHASE THE SUN // Shift to boost', 2.5) }
+      if (!countdown) { element('countdown').classList.remove('visible'); banner(0) }
     } else {
       accumulator += dt
-      const controls = input()
+      controls = input()
       while (accumulator >= 1 / 120 && state === 'running') {
         accumulator -= 1 / 120
         events(race.step(1 / 120, controls))
       }
     }
     toastTime = Math.max(0, toastTime - dt)
+    bannerTime = Math.max(0, bannerTime - dt)
     hitTime = Math.max(0, hitTime - dt)
     element('toast').classList.toggle('visible', toastTime > 0)
+    element('banner').classList.toggle('visible', bannerTime > 0)
     document.body.dataset.boost = String(race.boosting)
     document.body.dataset.hit = String(hitTime > 0)
   }
   hudTime += dt
   if (hudTime > 0.08) { updateHUD(); hudTime = 0 }
   audio.update(race.speed, race.boosting, race.drifting, state === 'running' && countdown === 0, dt)
-  world.render(dt, race, state)
+  world.render(dt, race, state, state === 'running' && controls.brake)
 }
 
 function showError(message: string) {

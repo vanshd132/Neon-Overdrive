@@ -1,4 +1,7 @@
-type EffectKind = 'countdown' | 'go' | 'pickup' | 'near' | 'crash' | 'finish';
+import { gearbox } from './race';
+
+type EffectKind = 'countdown' | 'go' | 'pickup' | 'near' | 'crash' | 'finish'
+  | 'jump' | 'land' | 'pad' | 'oil' | 'checkpoint' | 'mission' | 'fail';
 type VoiceBus = 'music' | 'effect';
 
 interface AudioGraph {
@@ -99,7 +102,9 @@ export class ArcadeAudio {
     this.smoothedSpeed += (safeSpeed - this.smoothedSpeed) * (1 - Math.exp(-seconds * 9));
 
     const pace = this.smoothedSpeed / 600;
-    const pitch = 42 + this.smoothedSpeed * 0.58 + (boosting ? 32 : 0);
+    // Revs climb through each gear and drop on upshift, like a real gearbox.
+    const { gear, rev } = gearbox(this.smoothedSpeed);
+    const pitch = 46 + rev * 120 + gear * 9 + (boosting ? 24 : 0);
     this.ramp(graph.carrier.frequency, pitch, now, 0.035);
     this.ramp(graph.sub.frequency, pitch / 2, now, 0.035);
     this.ramp(graph.carrier.detune, drifting ? 22 : 0, now, 0.04);
@@ -166,6 +171,32 @@ export class ArcadeAudio {
         [72, 76, 79, 84, 88].forEach((note, index) => {
           this.tone('effect', 'triangle', midiFrequency(note), start + index * 0.085, 0.2, 0.065);
         });
+        break;
+      case 'jump':
+        this.tone('effect', 'triangle', 220, start, 0.35, 0.07, 660);
+        break;
+      case 'land':
+        this.tone('effect', 'triangle', 120, start, 0.2, 0.1, 45);
+        this.tone('effect', 'sine', midiFrequency(84), start + 0.05, 0.12, 0.05);
+        break;
+      case 'pad':
+        this.tone('effect', 'sawtooth', 300, start, 0.3, 0.05, 1400);
+        break;
+      case 'oil':
+        [0, 0.09, 0.18].forEach(offset => this.tone('effect', 'square', 900, start + offset, 0.07, 0.03, 600));
+        break;
+      case 'checkpoint':
+        [67, 74, 79, 86].forEach((note, index) => {
+          this.tone('effect', 'triangle', midiFrequency(note), start + index * 0.06, 0.18, 0.07);
+        });
+        break;
+      case 'mission':
+        [79, 83, 86, 91].forEach((note, index) => {
+          this.tone('effect', 'sine', midiFrequency(note), start + index * 0.05, 0.14, 0.065);
+        });
+        break;
+      case 'fail':
+        this.tone('effect', 'triangle', 330, start, 0.3, 0.05, 160);
         break;
     }
   }

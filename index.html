@@ -5,7 +5,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#160e20" />
-    <meta name="description" content="Neon Overdrive. A sunset-soaked arcade racer. Dodge traffic, chase the close call, and make the night yours in a 90-second sprint or an endless run." />
+    <meta name="description" content="Neon Overdrive. An arcade highway racer across four districts. Dodge signalling traffic, hit ramps and boost pads, chain missions, and beat the checkpoint clock or survive an endless run." />
     <link rel="stylesheet" href="/src/style.css" />
     <title>NEON OVERDRIVE — After Hours Arcade Racing</title>
   </head>
@@ -48,15 +48,15 @@
                 <legend class="field-label"><span>01</span> Pick your run</legend>
                 <div class="mode-options">
                   <button class="mode-button selected" data-mode="sprint" type="button" aria-pressed="true">
-                    <span class="option-heading">Sprint <span class="selection-dot" aria-hidden="true"></span></span>
-                    <span class="option-description">90-second score chase</span>
+                    <span class="option-heading">Checkpoint rush <span class="selection-dot" aria-hidden="true"></span></span>
+                    <span class="option-description">Beat the clock. Gates add time.</span>
                   </button>
                   <button class="mode-button" data-mode="endless" type="button" aria-pressed="false">
                     <span class="option-heading">Endless <span class="selection-dot" aria-hidden="true"></span></span>
                     <span class="option-description">One road. Survive.</span>
                   </button>
                 </div>
-                <p id="mode-help" class="sr-only">Sprint: chase the highest score in 90 seconds. Endless: survive for as long as you can.</p>
+                <p id="mode-help" class="sr-only">Checkpoint rush: race the clock; each district checkpoint adds time, but less each time. Endless: survive for as long as you can while traffic heats up.</p>
               </fieldset>
 
               <fieldset class="difficulty-picker" aria-describedby="difficulty-help">
@@ -77,8 +77,8 @@
               </button>
               <div class="personal-best"><span class="micro-label">Personal best</span><strong id="best-score">0</strong><span class="best-unit">PTS / LOCAL RECORD</span></div>
             </div>
-            <p class="run-hint">Auto acceleration <span>·</span> Dodge traffic <span>·</span> Chase the close call</p>
-            <p class="mechanic-hint">Close calls multiply your score. Nitro recharges; pickups top it up.</p>
+            <p class="run-hint">Four districts <span>·</span> Curves &amp; rain <span>·</span> Ramps, pads &amp; oil</p>
+            <p class="mechanic-hint">Watch for blinkers and brake lights. Tailgate for slipstream nitro. Close calls and missions multiply your score.</p>
           </div>
 
           <aside class="scene-caption" aria-label="Scene caption">
@@ -117,21 +117,29 @@
             <div class="combo-readout"><strong id="combo-value">×1</strong><span class="micro-label">Close-call combo</span></div>
           </div>
           <div class="run-readouts">
-            <div class="telemetry-stat"><span id="time-label" class="micro-label">Time left</span><strong id="time-value">90</strong></div>
+            <div class="telemetry-stat zone-stat"><span id="zone-label" class="micro-label">District 01</span><strong id="zone-value">Sunset Coast</strong><span id="checkpoint-value" class="micro-label">Next gate 1.40 km</span></div>
+            <div class="telemetry-stat"><span id="time-label" class="micro-label">Time left</span><strong id="time-value">50s</strong></div>
             <div class="telemetry-stat distance-stat"><span class="micro-label">Distance</span><strong id="distance-value">0 m</strong></div>
           </div>
         </div>
 
+        <div id="mission" class="mission" hidden>
+          <div class="mission-head"><span class="micro-label">Mission</span><span id="mission-time" class="micro-label">0s left</span></div>
+          <strong id="mission-label"></strong>
+          <div class="gauge-track"><div id="mission-fill" class="gauge-fill"></div></div>
+          <span id="mission-progress" class="micro-label"></span>
+        </div>
+
         <div class="hud-bottom">
           <div class="speed-readout">
-            <span class="micro-label speed-caption"><span class="live-dot" aria-hidden="true"></span>Auto / Drive</span>
+            <span class="micro-label speed-caption"><span class="live-dot" aria-hidden="true"></span>Gear <strong id="gear-value" class="gear-value">1</strong><span id="draft-tag" class="draft-tag" hidden>Slipstream</span></span>
             <div><strong id="speed-value">0</strong><span class="speed-unit">KM/H</span></div>
             <div class="speed-ticks" aria-hidden="true"></div>
           </div>
           <p class="driving-hint">Keep it close.<br /><span>Make it count.</span></p>
           <div class="vehicle-status">
             <div class="gauge nitro-gauge">
-              <div class="gauge-label"><span>Nitro <span class="gauge-detail">/ Auto recharge + pickups</span></span><kbd>Shift</kbd></div>
+              <div class="gauge-label"><span>Nitro <span class="gauge-detail">/ Drift, slipstream + pickups</span></span><kbd>Shift</kbd></div>
               <div class="gauge-track" aria-label="Nitro reserve"><div id="nitro-fill" class="gauge-fill"></div></div>
             </div>
             <div class="gauge health-gauge">
@@ -143,6 +151,11 @@
       </section>
 
       <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+      <div id="banner" class="banner" role="status" aria-live="polite" aria-atomic="true">
+        <span id="banner-eyebrow" class="banner-eyebrow">District 01</span>
+        <strong id="banner-title" class="banner-title">Sunset Coast</strong>
+        <span id="banner-tagline" class="banner-tagline"></span>
+      </div>
       <div id="countdown" class="countdown" role="status" aria-live="polite" aria-atomic="true"></div>
 
       <div id="touch-controls" class="touch-controls" role="group" aria-label="Touch driving controls">
@@ -186,6 +199,9 @@
             <div><dt>Distance</dt><dd id="result-distance">0 m</dd></div>
             <div><dt>Close calls</dt><dd id="result-nearmisses">0</dd></div>
             <div><dt>Top speed</dt><dd id="result-top-speed">0 km/h</dd></div>
+            <div><dt>Checkpoints</dt><dd id="result-checkpoints">0</dd></div>
+            <div><dt>Jumps</dt><dd id="result-jumps">0</dd></div>
+            <div><dt>Missions</dt><dd id="result-missions">0</dd></div>
           </dl>
           <div class="result-actions">
             <button id="restart-btn" class="button button-primary" type="button"><span>One more run</span><span aria-hidden="true">↗</span></button>
