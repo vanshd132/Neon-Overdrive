@@ -2,6 +2,14 @@
 
 A neon-soaked 3D arcade highway racer built with [Three.js](https://threejs.org/) + [Vite](https://vitejs.dev/) + TypeScript. Race through four districts on curving, rolling roads: dodge traffic that signals and brakes, hit ramps and boost pads, avoid oil, chain missions, and beat the checkpoint clock or survive an endless run.
 
+![Main menu](docs/screenshots/menu.png)
+
+| Sunset Coast | Neon Downtown |
+| --- | --- |
+| ![Sunset Coast gameplay](docs/screenshots/gameplay-sunset-coast.png) | ![Neon Downtown](docs/screenshots/gameplay-neon-downtown.png) |
+| **Red Canyon** | **Storm Causeway** |
+| ![Red Canyon](docs/screenshots/gameplay-red-canyon.png) | ![Storm Causeway in the rain](docs/screenshots/gameplay-storm-causeway.png) |
+
 ## About this project
 
 This project was made to test the capability of **GPT-6 Astra** in **one shot**. The only prompt given was:
